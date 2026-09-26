@@ -1,0 +1,31 @@
+name: CraftVibe 1-Hour Auto Uploader
+
+on:
+  schedule:
+    - cron: '0 * * * *' # ہر گھنٹے کے شروع میں چلے گا (دن میں 24 ویڈیوز)
+  workflow_dispatch: # اگر آپ کسی وقت خود بٹن دبا کر ٹیسٹ کرنا چاہیں
+
+jobs:
+  upload_video:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Google APIs
+      run: |
+        pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
+    - name: Create Google Credentials File
+      run: |
+        echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
+
+    - name: Run CraftVibe Uploader
+      run: python uploader.py
+      
