@@ -2,8 +2,8 @@ name: Pro YouTube Uploader
 
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '50 * * * *'  # हर घंटे के 50वें मिनट पर चलेगा (जैसे 4:50, 5:50)
+  workflow_dispatch:      # मैनुअल चलाने का बटन
 
 concurrency: 
   group: youtube-auto-uploader
