@@ -26,11 +26,12 @@ jobs:
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
     - name: Create Google Credentials File
-      run: echo "${{ secrets.GOOGLE_CREDS }}" > service_account.json
+      env:
+        JSON_CREDS: ${{ secrets.GOOGLE_CREDS }}
+      run: echo "$JSON_CREDS" > service_account.json
 
     - name: Run Uploader
       env:
         MAIN_FOLDER_ID: ${{ secrets.MAIN_FOLDER_ID }}
       run: python uploader.py
       
-  
