@@ -1,3 +1,36 @@
+name: YouTube Uploader
+
 on:
   workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install System Dependencies (FFmpeg & Fonts)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg fonts-liberation
+
+    - name: Install Python Dependencies
+      run: |
+        pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
+    - name: Create Google Credentials File
+      run: echo "${{ secrets.GOOGLE_CREDS }}" > service_account.json
+
+    - name: Run Uploader
+      env:
+        MAIN_FOLDER_ID: ${{ secrets.MAIN_FOLDER_ID }}
+      run: python uploader.py
+      
   
