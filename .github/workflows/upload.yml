@@ -1,37 +1,62 @@
-name: YouTube Uploader
+name: Pro YouTube Uploader
 
 on:
+  schedule:
+    - cron: '0 * * * *'  # ہر گھنٹے کے بالکل شروع میں چلے گا
   workflow_dispatch:
+
+# پرو فیچر 1: کنکرنسی (Concurrency)
+# اگر پچھلے گھنٹے کی ویڈیو ابھی اپلوڈ ہو رہی ہے، تو نیا پروسیس اس کے ختم ہونے کا انتظار کرے گا تاکہ ویڈیوز مکس یا ڈپلیکیٹ نہ ہوں۔
+concurrency: 
+  group: youtube-auto-uploader
+  cancel-in-progress: false
 
 jobs:
   upload:
     runs-on: ubuntu-latest
+    
+    # پرو فیچر 2: ٹائم آؤٹ (Timeout)
+    # اگر انٹرنیٹ یا یوٹیوب API کی وجہ سے سکرپٹ پھنس جائے، تو 45 منٹ بعد خود کینسل ہو جائے گا تاکہ آپ کے گٹ ہب کے فری منٹس ضائع نہ ہوں۔
+    timeout-minutes: 45  
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # لیٹسٹ ورژن 
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5  # لیٹسٹ ورژن
       with:
         python-version: '3.10'
+        # پرو فیچر 3: کیشنگ (Caching)
+        # یہ پائتھن لائبریریز کو اپنے پاس سیو (Cache) کر لے گا تاکہ ہر گھنٹے دوبارہ ڈاؤن لوڈ نہ کرنی پڑیں، اس سے اپلوڈ جلدی شروع ہوگی۔
+        cache: 'pip' 
 
-    - name: Install System Dependencies (FFmpeg & Fonts)
+    - name: Install System Dependencies (FFmpeg)
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg fonts-liberation
 
     - name: Install Python Dependencies
       run: |
+        pip install --upgrade pip
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-    - name: Create Google Credentials File
+    - name: Create Secure Google Credentials
       env:
         JSON_CREDS: ${{ secrets.GOOGLE_CREDS }}
-      run: echo "$JSON_CREDS" > service_account.json
+      run: |
+        echo "$JSON_CREDS" > service_account.json
+        # پرو فیچر 4: سیکیورٹی ٹائٹ کرنا
+        chmod 600 service_account.json
 
-    - name: Run Uploader
+    - name: Run Auto Uploader
       env:
         MAIN_FOLDER_ID: ${{ secrets.MAIN_FOLDER_ID }}
       run: python uploader.py
+
+    # پرو فیچر 5: آٹو کلین اپ (Auto Cleanup)
+    # یہ سٹیپ ہر حال میں چلے گا (چاہے ویڈیو اپلوڈ فیل ہی کیوں نہ ہو جائے) اور آپ کی گوگل کی چابی (JSON) کو سرور سے ڈیلیٹ کر دے گا تاکہ 100% سیکیورٹی رہے۔
+    - name: Security Cleanup
+      if: always()
+      run: rm -f service_account.json
       
