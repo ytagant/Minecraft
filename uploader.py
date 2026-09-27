@@ -47,7 +47,7 @@ def find_or_create_folder(drive_service, folder_name, parent_id, create_if_missi
     return None
 
 def download_video_and_tokens(drive_service, main_folder_id):
-    print("🔍 ڈرائیو سکین کی جا رہی ہے...")
+    print("🔍 ڈرائیو سکین کی جا رہی है...")
     tokens_query = f"'{main_folder_id}' in parents and name contains 'token' and trashed=false"
     token_files = drive_service.files().list(q=tokens_query, fields='files(id, name)').execute().get('files', [])
     for t_file in token_files:
@@ -92,15 +92,14 @@ def download_video_and_tokens(drive_service, main_folder_id):
     return folder_id
 
 def edit_video_with_ffmpeg():
-    print("🎬 FFmpeg ایڈیٹنگ شروع ہو رہی ہے...")
+    print("🎬 FFmpeg ایڈیٹنگ شروع ہو रही ہے (بغیر مرر کے)...")
     
-    # اوبنٹو سرور کے فونٹ کا سیدھا راستہ
+    # اوبنٹو سرور के فونٹ का سیدھا रास्ता
     font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
     
     ffmpeg_cmd = [
         'ffmpeg', '-y', '-i', 'input_video.mp4',
         '-vf', (
-            f"hflip,"
             f"scale=1080:1830,"
             f"pad=1080:1920:0:90:black,"
             f"drawtext=fontfile='{font_path}':text='CraftVibe':fontcolor=white:fontsize=45:x=(w-text_w)/2:y=20,"
@@ -110,11 +109,10 @@ def edit_video_with_ffmpeg():
         'final_edit.mp4'
     ]
     
-    # یہ کمانڈ اصل ایرر کو لاگ میں پرنٹ کرے گی تاکہ ہمیں نظر آئے
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"❌ FFmpeg کا اصل ایرر:\n{result.stderr}")
-        raise Exception("FFmpeg کمانڈ کریش ہو گئی۔")
+        print(f"❌ FFmpeg का اصل ایرر:\n{result.stderr}")
+        raise Exception("FFmpeg کمانڈ کریش हो गई।")
         
     print("✅ ایڈیٹنگ مکمل!")
     return 'final_edit.mp4'
@@ -143,20 +141,20 @@ def upload_to_youtube(video_file, metadata):
             response = None
             while response is None:
                 status, response = request.next_chunk()
-                if status: print(f"⏳ اپلوڈ ہو رہا ہے... {int(status.progress() * 100)}%")
+                if status: print(f"⏳ اپلوڈ ہو रहा है... {int(status.progress() * 100)}%")
                     
-            print(f"✅ ویڈیو لائیو ہو گئی! ID: {response['id']}")
+            print(f"✅ ویڈیو لائیو हो गई! ID: {response['id']}")
             return True
         except HttpError as e:
             if e.resp.status == 403 and "quotaExceeded" in str(e):
-                print(f"⛔ {token} کا کوٹہ ختم۔")
+                print(f"⛔ {token} का कोटह ختم۔")
             else:
                 print(f"❌ یوٹیوب ایرر: {e}")
     return False
 
 def cleanup_and_move(drive_service, main_folder_id, folder_id_to_move):
     success_folder_id = find_or_create_folder(drive_service, 'Uploaded_Success', main_folder_id, create_if_missing=True)
-    print("🧹 فولڈر کو 'Uploaded_Success' میں شفٹ کیا جا رہا ہے...")
+    print("🧹 فولڈر को 'Uploaded_Success' میں شفٹ किया जा रहा है...")
     file_metadata = drive_service.files().get(fileId=folder_id_to_move, fields='parents').execute()
     previous_parents = ",".join(file_metadata.get('parents'))
     
@@ -169,10 +167,10 @@ def cleanup_and_move(drive_service, main_folder_id, folder_id_to_move):
 
 def main():
     if not MAIN_FOLDER_ID:
-        print("❌ MAIN_FOLDER_ID سیکرٹ سیٹ نہیں ہے!")
+        print("❌ MAIN_FOLDER_ID سیکرٹ سیٹ नहीं है!")
         return
 
-    print("🚀 CraftVibe آٹومیشن روبوٹ چالو ہو گیا ہے...\n")
+    print("🚀 CraftVibe آٹومेशन روبوٹ چالو ہو गया है...\n")
     drive_service = run_with_retry(get_drive_service)
     if not drive_service: return
     
@@ -186,7 +184,7 @@ def main():
         
     final_video = run_with_retry(edit_video_with_ffmpeg)
     if not final_video:
-        print("❌ ویڈیو ایڈیٹنگ فیل ہو گئی ہے، اس لیے اپلوڈ روک دیا گیا ہے۔")
+        print("❌ ویڈیو ایڈیٹنگ فیل ہو गई है, اس लिए अपلوड रोक दिया गया है।")
         return
     
     upload_success = run_with_retry(upload_to_youtube, max_retries=3, delay=5, video_file=final_video, metadata=metadata)
@@ -196,3 +194,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+        
