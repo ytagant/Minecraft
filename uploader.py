@@ -117,19 +117,41 @@ def edit_video_with_ffmpeg():
     print("✅ ایڈیٹنگ مکمل!")
     return 'final_edit.mp4'
 
-def get_free_asian_proxies():
-    print("🔍 انٹرنیٹ سے تازہ ترین ایشین (انڈیا، پاکستان، یو اے ای، بنگلہ دیش) پراکسیز تلاش کی جا رہی ہیں...")
-    url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=IN,PK,AE,BD&ssl=all&anonymity=all"
+def get_clean_global_proxies():
+    print("🔍 انٹرنیٹ سے پوری دنیا کی ہائی کوالٹی (Elite) پراکسیز تلاش کی جا رہی ہیں...")
+    # صرف Elite اور SSL سپورٹڈ پراکسیز دنیا بھر سے نکالی جا رہی ہیں
+    url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite"
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             proxies = response.text.strip().split('\r\n')
             valid_proxies = [p for p in proxies if p]
-            print(f"✅ کل {len(valid_proxies)} ایشین پراکسیز مل گئیں!")
+            print(f"✅ کل {len(valid_proxies)} گلوبل پراکسیز مل گئیں!")
             return valid_proxies
     except Exception as e:
         print(f"⚠️ پراکسی تلاش کرنے میں ایرر: {e}")
     return []
+
+def verify_ip_cleanliness(proxy_ip):
+    # یہ فنکشن چیک کرتا ہے کہ پراکسی سپیم/ڈیٹا سینٹر کی تو نہیں ہے اور اس کا ملک کونسا ہے
+    ip_only = proxy_ip.split(':')[0]
+    verify_url = f"http://ip-api.com/json/{ip_only}?fields=status,country,hosting"
+    
+    try:
+        res = requests.get(verify_url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("status") == "success":
+                # سپیم اور ہوسٹنگ فلٹر (ڈیٹا سینٹر آئی پی کو بلاک کرنا)
+                if data.get("hosting") == True:
+                    return False, "ڈیٹا سینٹر/سپیم آئی پی"
+                
+                # اگر آئی پی کلین ہے تو اس کے ملک کا نام واپس کریں
+                return True, data.get("country", "Unknown Country")
+    except:
+        pass
+    
+    return False, "چیک فیل (پراکسی ڈیڈ ہے)"
 
 def upload_to_youtube(video_file, metadata):
     original_title = metadata.get('title', 'Minecraft Shorts')[:80]
@@ -141,10 +163,10 @@ def upload_to_youtube(video_file, metadata):
         'status': {'privacyStatus': 'public', 'madeForKids': False}
     }
     
-    asian_proxies = get_free_asian_proxies()
-    if not asian_proxies:
-        print("⚠️ کوئی ایشین پراکسی نہیں ملی۔ ڈائریکٹ گٹ ہب نیٹ ورک ٹرائی کر رہے ہیں...")
-        asian_proxies = ['direct']
+    global_proxies = get_clean_global_proxies()
+    if not global_proxies:
+        print("⚠️ کوئی پراکسی نہیں ملی۔ ڈائریکٹ گٹ ہب نیٹ ورک ٹرائی کر رہے ہیں...")
+        global_proxies = ['direct']
         
     for token in TOKENS:
         if not os.path.exists(token): continue
@@ -153,9 +175,18 @@ def upload_to_youtube(video_file, metadata):
         creds = Credentials.from_authorized_user_file(token, ['https://www.googleapis.com/auth/youtube.upload'])
         token_exhausted = False
         
-        for proxy in asian_proxies:
+        for proxy in global_proxies:
+            country_info = ""
+            
             if proxy != 'direct':
-                print(f"🌐 ٹیسٹ کی جا رہی ہے پراکسی: {proxy}")
+                # --- اینٹی سپیم فلٹر چیک ---
+                is_clean, country_info = verify_ip_cleanliness(proxy)
+                if not is_clean:
+                    print(f"🚫 پراکسی مسترد کر دی گئی ({country_info}): {proxy}")
+                    continue
+                # ----------------------------
+                
+                print(f"🌐 ٹیسٹ کی جا رہی ہے کلین پراکسی ({country_info}): {proxy}")
                 os.environ['http_proxy'] = f"http://{proxy}"
                 os.environ['https_proxy'] = f"http://{proxy}"
             else:
@@ -177,12 +208,12 @@ def upload_to_youtube(video_file, metadata):
                 
                 # ======================================================
                 # 📡 GitHub Console Success Log (Urdu)
-                print("\n" + "="*50)
+                print("\n" + "="*60)
                 if proxy != 'direct':
-                    print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ {proxy} (ایشین پراکسی) کے IP سے اپلوڈ ہو گئی ہے!")
+                    print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ {proxy} ({country_info}) کے IP سے اپلوڈ ہو گئی ہے!")
                 else:
                     print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ ڈائریکٹ گٹ ہب آئی پی (Direct GitHub IP) سے اپلوڈ ہو گئی ہے!")
-                print("="*50 + "\n")
+                print("="*60 + "\n")
                 # ======================================================
                 
                 # کامیاب ہونے پر پراکسی کی سیٹنگ صاف کر دیں
