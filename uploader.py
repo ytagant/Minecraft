@@ -6,6 +6,7 @@ import subprocess
 import requests
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from googleapiclient.errors import HttpError
@@ -119,7 +120,6 @@ def edit_video_with_ffmpeg():
 
 def get_clean_global_proxies():
     print("🔍 انٹرنیٹ سے پوری دنیا کی ہائی کوالٹی (Elite) پراکسیز تلاش کی جا رہی ہیں...")
-    # صرف Elite اور SSL سپورٹڈ پراکسیز دنیا بھر سے نکالی جا رہی ہیں
     url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite"
     try:
         response = requests.get(url, timeout=10)
@@ -133,7 +133,6 @@ def get_clean_global_proxies():
     return []
 
 def verify_ip_cleanliness(proxy_ip):
-    # یہ فنکشن چیک کرتا ہے کہ پراکسی سپیم/ڈیٹا سینٹر کی تو نہیں ہے اور اس کا ملک کونسا ہے
     ip_only = proxy_ip.split(':')[0]
     verify_url = f"http://ip-api.com/json/{ip_only}?fields=status,country,hosting"
     
@@ -142,18 +141,26 @@ def verify_ip_cleanliness(proxy_ip):
         if res.status_code == 200:
             data = res.json()
             if data.get("status") == "success":
-                # سپیم اور ہوسٹنگ فلٹر (ڈیٹا سینٹر آئی پی کو بلاک کرنا)
                 if data.get("hosting") == True:
                     return False, "ڈیٹا سینٹر/سپیم آئی پی"
-                
-                # اگر آئی پی کلین ہے تو اس کے ملک کا نام واپس کریں
                 return True, data.get("country", "Unknown Country")
     except:
         pass
     
     return False, "چیک فیل (پراکسی ڈیڈ ہے)"
 
-def upload_to_youtube(video_file, metadata):
+def update_token_in_drive(drive_service, token_filename, main_folder_id):
+    query = f"'{main_folder_id}' in parents and name='{token_filename}' and trashed=false"
+    try:
+        results = drive_service.files().list(q=query, fields='files(id)').execute().get('files', [])
+        if results:
+            media = MediaFileUpload(token_filename, mimetype='application/json')
+            drive_service.files().update(fileId=results[0]['id'], media_body=media).execute()
+            print(f"✅ نیا ٹوکن '{token_filename}' ڈرائیو پر اپڈیٹ کر دیا گیا ہے!")
+    except Exception as e:
+        print(f"⚠️ ٹوکن اپڈیٹ کرنے میں ایرر: {e}")
+
+def upload_to_youtube(video_file, metadata, drive_service, main_folder_id):
     original_title = metadata.get('title', 'Minecraft Shorts')[:80]
     final_title = f"{original_title} #shorts"
     final_description = f"{original_title}\n\n🔥 Subscribe to CraftVibe for daily Minecraft Shorts!\n#minecraft #minecraftshorts #mcpe #craftvibe"
@@ -170,21 +177,34 @@ def upload_to_youtube(video_file, metadata):
         
     for token in TOKENS:
         if not os.path.exists(token): continue
-        print(f"🔄 ٹوکن {token} سے اپلوڈ ٹرائی کر رہے ہیں...")
+        print(f"🔄 ٹوکن {token} کی جانچ پڑتال ہو رہی ہے...")
         
-        creds = Credentials.from_authorized_user_file(token, ['https://www.googleapis.com/auth/youtube.upload'])
+        # 🌟 آٹو ٹوکن ریفریش سسٹم
+        creds = Credentials.from_authorized_user_file(token)
+        if creds and not creds.valid:
+            if creds.expired and creds.refresh_token:
+                for attempt in range(4):
+                    try:
+                        creds.refresh(Request())
+                        print(f"🔄 {token} ایکسپائر ہو گیا تھا، نیا ٹوکن جنریٹ کر لیا گیا ہے!")
+                        with open(token, 'w') as f:
+                            f.write(creds.to_json())
+                        update_token_in_drive(drive_service, token, main_folder_id)
+                        break
+                    except Exception as e:
+                        if attempt == 3: print(f"⚠️ ٹوکن ریفریش فیل: {e}")
+                        time.sleep(5)
+
         token_exhausted = False
         
         for proxy in global_proxies:
             country_info = ""
             
             if proxy != 'direct':
-                # --- اینٹی سپیم فلٹر چیک ---
                 is_clean, country_info = verify_ip_cleanliness(proxy)
                 if not is_clean:
                     print(f"🚫 پراکسی مسترد کر دی گئی ({country_info}): {proxy}")
                     continue
-                # ----------------------------
                 
                 print(f"🌐 ٹیسٹ کی جا رہی ہے کلین پراکسی ({country_info}): {proxy}")
                 os.environ['http_proxy'] = f"http://{proxy}"
@@ -206,17 +226,13 @@ def upload_to_youtube(video_file, metadata):
                         
                 print(f"✅ ویڈیو لائیو ہو گئی! ID: {response['id']}")
                 
-                # ======================================================
-                # 📡 GitHub Console Success Log (Urdu)
                 print("\n" + "="*60)
                 if proxy != 'direct':
                     print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ {proxy} ({country_info}) کے IP سے اپلوڈ ہو گئی ہے!")
                 else:
-                    print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ ڈائریکٹ گٹ ہب آئی پی (Direct GitHub IP) سے اپلوڈ ہو گئی ہے!")
+                    print(f"🚀 SUCCESS LOG: یہ ویڈیو کامیابی کے ساتھ ڈائریکٹ گٹ ہب آئی پی سے اپلوڈ ہو گئی ہے!")
                 print("="*60 + "\n")
-                # ======================================================
                 
-                # کامیاب ہونے پر پراکسی کی سیٹنگ صاف کر دیں
                 os.environ.pop('http_proxy', None)
                 os.environ.pop('https_proxy', None)
                 return True
@@ -229,12 +245,39 @@ def upload_to_youtube(video_file, metadata):
                 else:
                     print(f"❌ یوٹیوب ایرر: {e} | اگلی پراکسی ٹرائی کر رہے ہیں...")
             except Exception as e:
-                print(f"⛔ پراکسی سلو ہے یا کام نہیں کر رہی: {e} | اگلی پراکسی ٹرائی کر رہے ہیں...")
+                print(f"⚠️ پراکسی کنکشن ٹوٹ گیا یا ایرر آیا: {e}")
                 
-        # اگر تمام پراکسیز فیل ہو جائیں تو صفائی کر کے اگلے ٹوکن کی تیاری کریں
-        os.environ.pop('http_proxy', None)
-        os.environ.pop('https_proxy', None)
-        
+                # 🌟 سمارٹ ڈپلیکیٹ چیکر
+                print("⏳ یوٹیوب کی پروسیسنگ مکمل ہونے کے لیے 60 سیکنڈ کا انتظار کیا جا رہا ہے...")
+                time.sleep(60)
+                try:
+                    print("🔍 یوٹیوب پر چیک کر رہے ہیں کہ کیا شارٹس ویڈیو کامیابی سے اپلوڈ ہو چکی ہے...")
+                    temp_http = os.environ.pop('http_proxy', None)
+                    temp_https = os.environ.pop('https_proxy', None)
+                    
+                    check_req = youtube.search().list(part="snippet", forMine=True, q=final_title, maxResults=1)
+                    check_res = check_req.execute()
+                    
+                    if temp_http: os.environ['http_proxy'] = temp_http
+                    if temp_https: os.environ['https_proxy'] = temp_https
+
+                    if check_res.get('items') and check_res['items'][0]['snippet']['title'] == final_title:
+                        vid_id = check_res['items'][0]['id']['videoId']
+                        print(f"🎉 سمارٹ چیک پاس! پراکسی ایرر کے باوجود شارٹس ویڈیو یوٹیوب پر مل گئی! ID: {vid_id}")
+                        
+                        os.environ.pop('http_proxy', None)
+                        os.environ.pop('https_proxy', None)
+                        return True
+                except Exception as check_e:
+                    print(f"⚠️ چیکنگ فیل ہوئی، اگلی پراکسی ٹرائی کی جائے گی: {check_e}")
+                    if temp_http: os.environ['http_proxy'] = temp_http
+                    if temp_https: os.environ['https_proxy'] = temp_https
+                
+        if token_exhausted:
+            continue
+            
+    os.environ.pop('http_proxy', None)
+    os.environ.pop('https_proxy', None)
     return False
 
 def cleanup_and_move(drive_service, main_folder_id, folder_id_to_move):
@@ -272,11 +315,11 @@ def main():
         print("❌ ویڈیو ایڈیٹنگ فیل ہو گئی ہے، اس لیے اپلوڈ روک دیا گیا ہے۔")
         return
     
-    upload_success = run_with_retry(upload_to_youtube, max_retries=3, delay=5, video_file=final_video, metadata=metadata)
+    # یہاں upload_to_youtube میں ڈرائیو سروس اور فولڈر آئی ڈی بھیجی جا رہی ہے تاکہ ٹوکن اپڈیٹ ہو سکے
+    upload_success = run_with_retry(upload_to_youtube, max_retries=3, delay=5, video_file=final_video, metadata=metadata, drive_service=drive_service, main_folder_id=MAIN_FOLDER_ID)
     
     if upload_success:
         run_with_retry(cleanup_and_move, max_retries=3, delay=2, drive_service=drive_service, main_folder_id=MAIN_FOLDER_ID, folder_id_to_move=folder_id_to_move)
 
 if __name__ == '__main__':
     main()
-    
